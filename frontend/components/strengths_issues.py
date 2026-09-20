@@ -20,14 +20,19 @@ def display_critical_issues(analysis: Dict[str, Any]) -> None:
         st.markdown("Your resume doesn't have any urgent issues. Nice work.")
         return
 
-    st.markdown("### 🚨 Critical Issues")
-    st.error("These issues should be addressed first for better ATS performance.")
-
-    for item in critical:
-        st.markdown(f"- {item}")
-
-    extra = [s for s in summary if s not in critical]
-    if extra:
-        with st.expander("📋 Additional flagged items", expanded=False):
-            for item in extra:
-                st.markdown(f"- {item}")
+    if critical:
+        st.markdown("### 🚨 Critical Issues")
+        st.error("These issues should be addressed first for better ATS performance.")
+        for item in critical:
+            st.markdown(f"- {item}")
+        extra = [s for s in summary if s not in critical]
+        if extra:
+            with st.expander("📋 Additional flagged items", expanded=False):
+                for item in extra:
+                    st.markdown(f"- {item}")
+    else:
+        # Findings exist, but none is high severity.
+        st.markdown("### ⚠️ Issues to Improve")
+        st.info("No critical issues, but these items would improve your resume.")
+        for item in summary:
+            st.markdown(f"- {item}")

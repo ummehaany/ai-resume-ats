@@ -1,0 +1,6 @@
+# Frontend (Streamlit) dependencies only - no ML libraries, so it deploys to small hosts.
+# Pinned to the versions the test-suite was run against (Python 3.11).
+streamlit==1.64.0
+requests==2.34.2
+supabase==2.31.0
+python-dotenv==1.2.3

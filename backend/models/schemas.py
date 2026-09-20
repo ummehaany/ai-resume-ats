@@ -51,3 +51,5 @@ class AnalysisResponse(BaseModel):
     jd_comparison: Optional[JDComparison] = None
     warnings: List[str] = []
     interpretation: str = ""
+    scoring_notes: List[str] = []        # plain-language explanation of how the score was formed
+    job_title: Optional[str] = None      # target role parsed from the job description (if one was given)

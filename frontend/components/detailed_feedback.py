@@ -1,8 +1,9 @@
+import html
 from typing import Any, Dict, List
 
 import streamlit as st
 
-from frontend.components._helpers import get_severity_style
+from frontend.components._helpers import get_severity_style, normalize_severity
 
 
 SEVERITY_ORDER = ["critical", "high", "medium", "low"]
@@ -11,15 +12,15 @@ SEVERITY_ORDER = ["critical", "high", "medium", "low"]
 def _group_by_severity(issues: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     grouped: Dict[str, List[Dict[str, Any]]] = {level: [] for level in SEVERITY_ORDER}
     for issue in issues:
-        level = (issue.get("severity_level") or "low").lower()
-        grouped.setdefault(level, []).append(issue)
+        level = normalize_severity(issue.get("severity_level"))
+        grouped[level].append(issue)
     return grouped
 
 
 def _render_issue(issue: Dict[str, Any]) -> None:
     icon, text_color, bg_color = get_severity_style(issue.get("severity_level"))
-    title = issue.get("issue_title", "Untitled issue")
-    impact = issue.get("ats_impact", "")
+    title = html.escape(str(issue.get("issue_title", "Untitled issue")))
+    impact = html.escape(str(issue.get("ats_impact", "")))
     explanation = issue.get("explanation", "")
     where = issue.get("where_it_appears", "")
     how_to_fix = issue.get("how_to_fix", "")

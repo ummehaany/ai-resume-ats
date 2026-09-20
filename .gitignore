@@ -1,14 +1,55 @@
-.DS_Store
+# ── Secrets - NEVER commit these ──
+.env
+.env.*
+!.env.example
+secrets.toml
+!secrets.toml.example
+*.pem
+*.key
 
+# ── Python ──
 __pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
+# ── Virtual environments ──
+venv/
+.venv/
+env/
+ENV/
 
-# Datasets
-*.csv
-
-# Logs
+# ── Logs / runtime data ──
 *.log
+logs/
+backend/logs/
 
-# ML models
+# ── Datasets, models, weights ──
+*.csv
 *.safetensors
 *.pkl
+*.pt
+*.bin
+ml model/
+saved_summary_model/
+
+# ── Jupyter ──
+.ipynb_checkpoints/
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── Real resumes / personal documents - never commit these ──
+# (the test-suite builds its sample PDFs/DOCX in memory; the repo tracks none)
+*.pdf
+*.docx
+*.doc
+resumes/
+uploads/

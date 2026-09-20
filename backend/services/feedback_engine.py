@@ -1,5 +1,3 @@
-so yeah#what is specifically wrong in my resume?
-
 import re
 from typing import List, Dict, Any, Optional
 from backend.models.schemas import IssueDetail
@@ -13,6 +11,7 @@ def analyze_issues(
         skill_validation: Dict, 
         scores: Dict, 
         contact_info: Optional[Dict]=None, 
+        location_results: Optional[Dict]=None,
 ) -> List[IssueDetail]:
     
     detected: List[IssueDetail]=[]
@@ -117,7 +116,7 @@ def analyze_issues(
         'b.tech', 'btech', 'b.e.', 'b.sc', 'bsc', 'm.tech', 'mtech', 'm.sc',
         'bachelor', 'master', 'phd', 'university', 'college',
         'institute of technology', 'cgpa', 'gpa', 'graduated', 'diploma',
-        'class of', '20', 'batch of',
+        'class of', 'batch of', 'high school', 'secondary school',
     ])
     if not edu_entries and not has_education_signal:
         detected.append(IssueDetail(
@@ -405,6 +404,26 @@ def analyze_issues(
                 "web applications using React, Node.js, and AWS. Passionate about "
                 "clean architecture and performance optimization."
             ),
+        ))
+
+    # 11. Privacy: full street address / postal code (only when actually detected)
+    if location_results and location_results.get('privacy_risk') in ('medium', 'high'):
+        found = [loc.get('text', '') for loc in location_results.get('detected_locations', [])][:3]
+        detected.append(IssueDetail(
+            issue_title="Full Address or Postal Code on Resume",
+            severity_level="Low",
+            ats_impact="Low",
+            explanation=(
+                "A street address or postal code was detected. ATS systems do not need it, "
+                "and it exposes personal information to everyone who sees the resume."
+            ),
+            where_it_appears="Header / contact section: " + "; ".join(found) if found else "Header / contact section",
+            how_to_fix="Keep only 'City, State/Country' in the header and remove the street address and postal code.",
+            action_items=[
+                "Remove your street address and postal/ZIP/PIN code",
+                "Keep a single 'City, State' or 'City, Country' line if location matters for the role",
+            ],
+            example_improvement="Before: 12 Park Street, Kolkata 700016\nAfter: Kolkata, India",
         ))
 
     return detected

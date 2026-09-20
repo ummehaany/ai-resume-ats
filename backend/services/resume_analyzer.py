@@ -5,7 +5,12 @@ from backend.models.schemas import IssueDetail
 from backend.services.groq_parser import parse_resume, parse_job_description
 from backend.services.jd_matcher import compare_resume_with_jd
 from backend.services.feedback_engine import analyze_issues, generate_issues_summary
-from backend.services.ats_scorer import calculate_overall_score, validate_skills_with_projects
+from backend.services.ats_scorer import (
+    calculate_overall_score,
+    detect_location_info,
+    generate_improvements,
+    validate_skills_with_projects,
+)
 
 
 def analyze_full_resume(
@@ -17,7 +22,6 @@ def analyze_full_resume(
     import logging
     logger = logging.getLogger('ats_resume_scorer')
     parsed_resume = parse_resume(resume_text)
-    logger.info(f"Groq parsed summary: {parsed_resume.get('professional_summary', '')[:100]!r}")
     logger.info(f"Groq parsed skills count: {len(parsed_resume.get('skills', []))}")
     logger.info(f"Groq parsed experience count: {len(parsed_resume.get('experience', []))}")
 
@@ -48,8 +52,10 @@ def analyze_full_resume(
 
     jd_comparison_result = None
     jd_keywords = None
+    job_title = None
     if job_description and job_description.strip():
         parsed_jd = parse_job_description(job_description.strip())
+        job_title = parsed_jd.get('job_title') or None
         jd_keywords = list(set(
             parsed_jd.get('keywords', []) +
             parsed_jd.get('required_skills', []) +
@@ -65,11 +71,9 @@ def analyze_full_resume(
             nlp=nlp,
         )
 
-    from backend.utils.file_utils import (
-        get_default_grammar_results, get_default_location_results,
-    )
-    grammar_results  = get_default_grammar_results()
-    location_results = get_default_location_results()
+    # Privacy check (street address / postal code). Grammar is intentionally not scored:
+    # there is no reliable checker, and awarding fixed points would inflate every score.
+    location_results = detect_location_info(resume_text)
 
     scores = calculate_overall_score(
         text=resume_text,
@@ -78,7 +82,6 @@ def analyze_full_resume(
         keywords=keywords,
         action_verbs=action_verbs,
         skill_validation_results=skill_validation,
-        grammar_results=grammar_results,
         location_results=location_results,
         jd_keywords=jd_keywords,
         experience_months=experience_months,
@@ -92,6 +95,7 @@ def analyze_full_resume(
         skill_validation=skill_validation,
         scores=scores,
         contact_info=contact_info,
+        location_results=location_results,
     )
 
     issues_summary = generate_issues_summary(detailed_feedback)
@@ -114,6 +118,9 @@ def analyze_full_resume(
         "validated_count": len(validated_raw),
         "validation_pct":  val_pct,
     }
+
+    strengths = _generate_strengths(parsed_resume, skills, projects, action_verbs, skill_validation, scores)
+    critical_issues, suggestions = _derive_critical_and_suggestions(detailed_feedback, scores, skill_validation)
 
     return {
         "ATS_score":          scores['overall_score'],
@@ -138,7 +145,11 @@ def analyze_full_resume(
             jd_comparison_result['missing_keywords']
             if jd_comparison_result else []
         ),
-        "strengths": _generate_strengths(parsed_resume, skills, projects, action_verbs, skill_validation, scores),
+        "strengths": strengths,
+        "critical_issues": critical_issues,
+        "suggestions": suggestions,
+        "scoring_notes": scores.get('scoring_notes', []),
+        "job_title": job_title,
         "interpretation":    scores.get('overall_interpretation', ''),
         "skill_validation_details": skill_validation_details,
         "experience_months": experience_months,
@@ -178,3 +189,26 @@ def _generate_strengths(
         strengths.append("Content quality is high with measurable achievements")
 
     return strengths
+
+
+def _derive_critical_and_suggestions(detailed_feedback, scores: Dict, skill_validation: Dict):
+    """Build the 'critical issues' and 'suggestions' lists strictly from findings that were
+    actually detected (no canned filler text)."""
+    critical = [
+        fb.issue_title for fb in detailed_feedback
+        if (fb.severity_level or '').lower() == 'high'
+    ]
+
+    suggestions: List[str] = []
+    for fb in detailed_feedback:
+        if (fb.severity_level or '').lower() in ('high', 'moderate', 'medium') and fb.how_to_fix:
+            suggestions.append(fb.how_to_fix)
+    suggestions.extend(generate_improvements(scores, skill_validation))
+
+    seen, unique = set(), []
+    for item in suggestions:
+        key = item.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(item.strip())
+    return critical, unique[:8]

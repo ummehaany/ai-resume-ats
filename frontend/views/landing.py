@@ -49,12 +49,12 @@ def render():
     with col1:
         st.markdown("""
         ### 📊 Comprehensive Scoring
-        Get detailed scores across 5 key dimensions:
-        - Formatting (20%)
-        - Keywords & Skills (25%)
-        - Content Quality (25%)
-        - Skill Validation (15%)
-        - ATS Compatibility (15%)
+        Get detailed scores across 5 key dimensions (points out of 100):
+        - Formatting (20)
+        - Keywords & Skills (25)
+        - Content Quality (25)
+        - Skill Validation (15)
+        - ATS Compatibility (15)
         """)
     
     with col2:
@@ -67,10 +67,10 @@ def render():
     
     with col3:
         st.markdown("""
-        ### 🔒 Privacy First
-        All analysis runs locally with no external API calls. Your resume data never leaves your system.
-        
-        **100% Private & Secure**
+        ### 🔒 Your Data
+        Your resume text is sent to an AI provider (Groq) to extract skills and experience, and the
+        results are saved to your account so you can revisit them. The uploaded file itself is not
+        stored. You can delete any saved analysis from the History page.
         """)
     
     st.markdown("---")
@@ -83,13 +83,13 @@ def render():
     with col1:
         st.markdown("""
         #### 1️⃣ Upload Your Resume
-        Support for PDF, DOC, and DOCX formats
+        Supports PDF and DOCX (max 5 MB)
         """)
     
     with col2:
         st.markdown("""
         #### 2️⃣ AI Analysis
-        Our local AI models analyze your resume across multiple dimensions
+        An AI model plus NLP checks analyze your resume across multiple dimensions
         """)
     
     with col3:

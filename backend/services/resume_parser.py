@@ -1,60 +1,77 @@
 import io
-import magic
-from typing import Tuple, Optional, Tuple
+import zipfile
+from typing import Optional, Tuple
 
 import pdfplumber
 from docx import Document
 import PyPDF2
 
-from backend.utils.file_utils import(
-    FileParsingError, 
-    TextExtractionError, 
-    FileUploadError, 
-    log_error, 
-    log_warning, 
-    log_info, 
-    with_fallback
+from backend.utils.file_utils import (
+    FileParsingError,
+    FileValidationError,
+    TextExtractionError,
+    log_error,
+    log_warning,
+    log_info,
+    with_fallback,
 )
 
-from backend.core.config import (
-    MAX_FILE_SIZE_BYTES,
-    MAX_FILE_SIZE_MB, 
-    SUPPORTED_MIME_TYPES
-)
+from backend.core import config
 
-class FileParsingError(Exception):
-    pass
+MAX_PDF_PAGES = 20   # resumes are 1-4 pages; refuse absurdly large PDFs (CPU/memory protection)
 
-class FileValidationError(Exception):
-    pass
+_OLE_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'   # legacy Office (.doc/.xls/.ppt)
 
-def validate_file(file_data:bytes, filename:str)->Tuple[bool, str, Optional[str]]:
+
+def detect_file_type(file_data: bytes) -> Optional[str]:
+    """Identify 'pdf' / 'docx' / 'doc' from the file *content*.
+
+    Signature sniffing is used instead of python-magic so no system library
+    (libmagic) is needed. Returns None when the type is not recognised.
+    """
+    if b'%PDF-' in file_data[:1024]:
+        return 'pdf'
+    if file_data.startswith(_OLE_MAGIC):
+        return 'doc'
+    if file_data[:4] in (b'PK\x03\x04', b'PK\x05\x06'):
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_data)) as zf:
+                names = set(zf.namelist())
+                if 'word/document.xml' in names:
+                    total = sum(info.file_size for info in zf.infolist())
+                    if total > config.MAX_DOCX_UNCOMPRESSED_BYTES:
+                        return 'docx-too-large'
+                    return 'docx'
+        except zipfile.BadZipFile:
+            return None
+    return None
+
+
+def validate_file(file_data: bytes, filename: str) -> Tuple[bool, str, Optional[str]]:
+    """Return (is_valid, error_message, file_type). Always a 3-tuple."""
     file_size_bytes = len(file_data)
-    if file_size_bytes > MAX_FILE_SIZE_BYTES:
+    if file_size_bytes == 0:
+        return False, 'The uploaded file is empty. Please check the file and try again.', None
+
+    if file_size_bytes > config.MAX_FILE_SIZE_BYTES:
         size_mb = file_size_bytes / (1024 * 1024)
         return False, (
-            f'File size ({size_mb:.2f} MB) exceeds the maximum of {MAX_FILE_SIZE_MB} MB. '
+            f'File size ({size_mb:.2f} MB) exceeds the maximum of {config.MAX_FILE_SIZE_MB} MB. '
             'Please upload a smaller file or compress your resume.'
         ), None
-    
-    if file_size_bytes==0:
-        return False, 'uploade file is empty...please check the file you have uploaded and try again'
-    
-    try:
-        mime_type=magic.from_buffer(file_data, mime=True)
-    except Exception as e:
-        return False, f"error deteminin the file type : {e}", None
-    
-    if mime_type not in SUPPORTED_MIME_TYPES:
-        supported=', '.join(SUPPORTED_MIME_TYPES.keys()).upper()
-        return False, (
-            f'Unsupported file type: {mime_type}. '
-            f'Please upload one of: {supported}.'
-        ), None
-    
-    
 
-    return True, '', SUPPORTED_MIME_TYPES[mime_type]
+    file_type = detect_file_type(file_data)
+    if file_type == 'docx-too-large':
+        return False, 'The DOCX file expands to an unreasonable size and was rejected.', None
+    if file_type is None:
+        return False, 'Unsupported or unrecognised file type. Please upload a PDF or DOCX resume.', None
+    if file_type == 'doc':
+        return False, (
+            'Legacy Word (.doc) files are not supported. '
+            'Please save your resume as .docx or .pdf and upload that instead.'
+        ), None
+
+    return True, '', file_type
 
 def _extract_pdf_hyperlinks(file_data: bytes) -> str:
     urls = []
@@ -87,6 +104,8 @@ def _extract_pdf_hyperlinks(file_data: bytes) -> str:
 def _extract_pdf_with_pdfplumber(file_data: bytes) -> str:
     text = ''
     with pdfplumber.open(io.BytesIO(file_data)) as pdf:
+        if len(pdf.pages) > MAX_PDF_PAGES:
+            raise FileValidationError(f'PDF has {len(pdf.pages)} pages; the maximum is {MAX_PDF_PAGES}.')
         for page in pdf.pages:
             page_text = page.extract_text()
             if page_text:
@@ -108,6 +127,8 @@ def _extract_pdf_with_pdfplumber(file_data: bytes) -> str:
 def _extract_pdf_with_pypdf2(file_data: bytes) -> str:
     text = ''
     pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
+    if len(pdf_reader.pages) > MAX_PDF_PAGES:
+        raise FileValidationError(f'PDF has {len(pdf_reader.pages)} pages; the maximum is {MAX_PDF_PAGES}.')
     for page in pdf_reader.pages:
         page_text = page.extract_text()
         if page_text:
@@ -138,7 +159,10 @@ def extract_text_from_pdf(file_data: bytes) -> str:
         if used_fallback:
             log_info('PDF EXTRACTION succeded using the PyPDF2 fallback', context='resume_parser')
         return result
-        
+
+    except FileValidationError:
+        raise
+
     except Exception as e:
         log_error(e, context='extract_text_from_pdf')
         raise FileParsingError(
@@ -216,31 +240,21 @@ def extract_text(file_data:bytes, file_type:str)->str:
         )
     
 def parse_resume_file(file_data: bytes, filename:str)->Tuple[str, dict]:
-    log_info(f'parsing file :{filename}', context='parse_Resume_file')
+    log_info('parsing uploaded resume', context='parse_resume_file')
 
-    #phase01:validate file
-    try:
-        is_valid, error_msg, file_type=validate_file(file_data, filename)
-        if not is_valid:
-            log_warning(f'valiudation failed for file {filename}', context='parse_resume_file')
-            raise FileValidationError(error_msg)
-    
-    except FileValidationError as e:
-        raise 
+    # phase 1: validate file (size, emptiness, real content type)
+    is_valid, error_msg, file_type = validate_file(file_data, filename)
+    if not is_valid:
+        log_warning('validation failed for uploaded file', context='parse_resume_file')
+        raise FileValidationError(error_msg)
 
-    except Exception as e:
-        log_error(e, context='parse_resume_file_validation')
-        raise FileValidationError(
-            'Could not validate the uploaded file. Please ensure it is a valid PDF or DOCX.'
-        ) from e
-    
     #phase02: extraction of file
 
     try:
         text = extract_text(file_data, file_type)
-        log_info(f'Extracted {len(text)} chars from {filename}', context='parse_resume_file')
+        log_info(f'Extracted {len(text)} chars', context='parse_resume_file')
 
-    except FileParsingError:
+    except (FileParsingError, FileValidationError):
         raise   # Re-raise unchanged
 
     except Exception as e:

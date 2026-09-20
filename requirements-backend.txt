@@ -1,0 +1,36 @@
+# Backend (FastAPI) dependencies - pinned to the versions the test-suite was run against (Python 3.11).
+# Install:  pip install -r requirements-backend.txt
+# On Linux servers prefer the CPU-only PyTorch build (it is ~200 MB instead of ~2 GB):
+#     pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+# and then run the command above (pip keeps the already-installed torch).
+# WeasyPrint also needs system libraries (Pango/HarfBuzz) - see README "System libraries".
+
+# web framework
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic==2.13.5
+python-multipart==0.0.32
+python-dotenv==1.2.3
+
+# NLP / ML
+torch==2.6.0
+spacy==3.8.16
+sentence-transformers==6.1.0
+numpy==2.4.6
+rapidfuzz==3.14.6
+# spaCy language model (pinned wheel, so no "python -m spacy download" step is needed)
+en_core_web_md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl
+
+# file parsing
+pdfplumber==0.11.10
+PyPDF2==3.0.1
+python-docx==1.2.0
+
+# PDF report generation
+jinja2==3.1.6
+weasyprint==70.0
+
+# external services
+httpx==0.28.1
+groq==1.7.0
+PyJWT[crypto]==2.14.0

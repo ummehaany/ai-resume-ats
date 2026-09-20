@@ -3,11 +3,6 @@ import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
 
-from typing import List, Dict
-import numpy as np
-import spacy
-from sentence_transformers import SentenceTransformer
-
 from backend.utils.matching import fuzzy_match_keywords, normalize_skill
 from rapidfuzz import fuzz
 
@@ -99,11 +94,14 @@ def compare_resume_with_jd(
     nlp: spacy.Language,
 ) -> Dict:
     semantic_similarity = calculate_semantic_similarity(resume_text, jd_text, embedder)
-    matched_keywords    = identify_matched_keywords(resume_keywords, jd_keywords)
-    missing_keywords    = identify_missing_keywords(resume_keywords, jd_keywords)
+    # Compare the JD against everything the resume declares - keywords AND skills. Comparing only the
+    # keyword list wrongly reported skills such as "Python" as missing although they are listed on the resume.
+    resume_terms        = list(dict.fromkeys(list(resume_keywords or []) + list(resume_skills or [])))
+    matched_keywords    = identify_matched_keywords(resume_terms, jd_keywords)
+    missing_keywords    = identify_missing_keywords(resume_terms, jd_keywords)
     skills_gap          = analyze_skills_gap(resume_skills, jd_text, nlp)
     match_percentage    = calculate_match_percentage(
-        resume_keywords, jd_keywords, semantic_similarity
+        resume_terms, jd_keywords, semantic_similarity
     )
 
     return {

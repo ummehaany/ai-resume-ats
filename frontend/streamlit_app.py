@@ -91,7 +91,7 @@ with st.sidebar:
         # Signed-in state: show email + sign-out button.
         st.caption(f"Signed in as **{st.session_state.user_email}**")
         if st.button("Sign out", use_container_width=True):
-            supabase_client.sign_out()
+            supabase_client.sign_out(st.session_state.access_token)
             for k in ("access_token", "refresh_token", "user_id", "user_email"):
                 st.session_state[k] = None
             st.rerun()

@@ -2,15 +2,7 @@ import requests
 import streamlit as st
 
 from frontend.services import api_client
-
-
-def _show_backend_error(exc: Exception) -> None:
-    if isinstance(exc, requests.ConnectionError):
-        st.error("Could not reach the backend. Is it running on port 8000?")
-    elif isinstance(exc, requests.HTTPError) and exc.response is not None:
-        st.error(f"Backend returned {exc.response.status_code}: {exc.response.text}")
-    else:
-        st.error(f"Unexpected error: {exc}")
+from frontend.services.errors import show_backend_error as _show_backend_error
 
 
 def render() -> None:
@@ -47,7 +39,11 @@ def render() -> None:
         component_scores = analysis.get("component_scores", {}) or {}
         jd_comparison = analysis.get("jd_comparison") or analysis.get("jd_match_analysis")
 
+        job_title = entry.get("job_title")
+
         with st.expander(f"📄 {filename} — Score: {ats_score:.0f}/100 — {created_at}"):
+            if job_title:
+                st.caption(f"Target role (from the job description): {job_title}")
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.metric("Overall", f"{ats_score:.0f}/100")

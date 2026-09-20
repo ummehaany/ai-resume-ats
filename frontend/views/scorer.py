@@ -4,6 +4,7 @@ import requests
 import streamlit as st
 
 from frontend.services import api_client
+from frontend.services.errors import show_backend_error as _show_backend_error
 from frontend.components.dashboard import display_results_dashboard
 
 
@@ -27,22 +28,6 @@ def _read_jd(jd_file, jd_text: str) -> str:
         "if you have a PDF or DOCX."
     )
     return ""
-
-
-def _show_backend_error(exc: Exception) -> None:
-    """Translate a `requests` exception into a friendly Streamlit error."""
-    if isinstance(exc, requests.ConnectionError):
-        st.error("Could not reach the backend. Is `uvicorn backend.main:app` running on port 8000?")
-    elif isinstance(exc, requests.Timeout):
-        st.error("The backend took too long to respond. Try a smaller resume or check the server logs.")
-    elif isinstance(exc, requests.HTTPError) and exc.response is not None:
-        try:
-            detail = exc.response.json().get("detail", exc.response.text)
-        except ValueError:
-            detail = exc.response.text
-        st.error(f"Backend returned {exc.response.status_code}: {detail}")
-    else:
-        st.error(f"Unexpected error: {exc}")
 
 
 def _summary_text(analysis: dict) -> str:
@@ -71,8 +56,8 @@ def _render_upload_area(analysis_mode: str):
         st.markdown("### 📄 Upload Resume")
         resume_file = st.file_uploader(
             "Choose your resume file",
-            type=["pdf", "doc", "docx"],
-            help="Supported: PDF, DOC, DOCX (max 5 MB)",
+            type=["pdf", "docx"],
+            help="Supported: PDF, DOCX (max 5 MB). Older .doc files: save as .docx or PDF first.",
             key="resume_upload",
         )
         if resume_file:
@@ -104,6 +89,7 @@ def _render_upload_area(analysis_mode: str):
                     height=200,
                     placeholder="Paste the JD here...",
                     key="jd_text",
+                    max_chars=15000,
                 )
                 if jd_text:
                     st.success(f"✅ {len(jd_text)} characters")
@@ -220,5 +206,7 @@ def render() -> None:
 
     st.session_state["scorer_analysis"] = analysis
     st.success("✅ Analysis complete!")
+    for warning in analysis.get("warnings") or []:
+        st.warning(warning)
     display_results_dashboard(analysis)
     _render_export_buttons(analysis)

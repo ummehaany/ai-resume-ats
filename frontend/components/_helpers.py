@@ -23,12 +23,24 @@ def get_score_emoji(score: float) -> str:
     return "🔴"
 
 
+def normalize_severity(severity) -> str:
+    """Map whatever the backend sent to one of: critical, high, medium, low.
+
+    The backend emits "High" / "Moderate" / "Low"; "moderate" must count as "medium",
+    otherwise those issues are silently dropped from the UI.
+    """
+    level = str(severity or "low").strip().lower()
+    if level == "moderate":
+        return "medium"
+    return level if level in ("critical", "high", "medium", "low") else "low"
+
+
 def get_severity_style(severity: str) -> Tuple[str, str, str]:
     """
     Return (icon, text_color, background_color) for an IssueDetail severity.
     Matches the values the backend emits in `detailed_feedback[].severity_level`.
     """
-    level = (severity or "").lower()
+    level = normalize_severity(severity)
     if level in ("critical", "high"):
         return "🔴", "#c62828", "#ffebee"
     if level == "medium":

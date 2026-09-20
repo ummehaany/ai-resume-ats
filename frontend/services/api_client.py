@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List
 
 import requests
@@ -8,10 +9,14 @@ DEFAULT_BACKEND_URL = "http://localhost:8000"
 
 
 def _backend_url() -> str:
-    try:
-        return st.secrets["backend"]["url"]
-    except (KeyError, FileNotFoundError):
-        return DEFAULT_BACKEND_URL
+    """Backend base URL: BACKEND_URL env var, else [backend] url in Streamlit secrets, else localhost."""
+    url = os.getenv("BACKEND_URL", "").strip()
+    if not url:
+        try:
+            url = str(st.secrets["backend"]["url"]).strip()
+        except (KeyError, FileNotFoundError, AttributeError):
+            url = DEFAULT_BACKEND_URL
+    return url.rstrip("/")
 
 
 def _auth_headers(access_token: str) -> Dict[str, str]:
@@ -44,9 +49,10 @@ def analyze_resume(
     return response.json()
 
 
-def get_history(access_token: str) -> List[Dict[str, Any]]:
+def get_history(access_token: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     response = requests.get(
         f"{_backend_url()}/api/v1/history",
+        params={"limit": limit, "offset": offset},
         headers=_auth_headers(access_token),
         timeout=30,
     )

@@ -5,7 +5,7 @@ import streamlit as st
 from frontend.components._helpers import get_score_color, get_score_emoji
 
 
-# Component max scores match backend/core/config.py SCORE_WEIGHTS.
+# Component max scores match backend/core/config.py SCORE_COMPONENT_MAX.
 # (Backend returns each component's score on its own scale, not 0–100.)
 COMPONENTS = [
     ("Formatting",        "formatting",        20, "📝"),
@@ -65,3 +65,9 @@ def display_score_breakdown(analysis: Dict[str, Any]) -> None:
             )
             st.markdown(f"**{value:.0f}/{max_score}**")
             st.markdown("")
+
+    notes = analysis.get("scoring_notes") or []
+    if notes:
+        with st.expander("How was this score calculated?", expanded=False):
+            for note in notes:
+                st.markdown(f"- {note}")

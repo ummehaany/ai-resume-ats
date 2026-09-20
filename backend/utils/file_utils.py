@@ -1,59 +1,86 @@
+"""Logging setup, shared exception types and small helpers used across the backend."""
 import logging
-import sys
 import os
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
+import sys
+from typing import Callable, Optional, Tuple, TypeVar
 
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
+from backend.core import config
 
 logger = logging.getLogger('ats_resume_scorer')
-logger.setLevel(logging.INFO)
 
-# Simplified file handler - only basic logs
-file_handler = logging.FileHandler(os.path.join(LOG_DIR, "ats_scorer.log"))
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(message)s'
-))
 
-# Simplified console handler
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.WARNING)
-console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+def configure_logging() -> None:
+    """Console logging always; a log file only if LOG_FILE is set (and writable)."""
+    # Third-party parsers log the document content they are reading at DEBUG level (pdfminer prints the
+    # PDF's text objects). Keep them at WARNING no matter how verbose the root logger is made.
+    for noisy in ('pdfminer', 'pdfplumber', 'PyPDF2', 'fontTools', 'weasyprint', 'httpcore', 'groq'):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+    if logger.handlers:
+        return
+    level = getattr(logging, config.LOG_LEVEL, logging.INFO)
+    logger.setLevel(level)
+    logger.propagate = False
 
-if not logger.handlers:
-    logger.addHandler(file_handler)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(console_handler)
 
+    if config.LOG_FILE:
+        try:
+            log_dir = os.path.dirname(os.path.abspath(config.LOG_FILE))
+            os.makedirs(log_dir, exist_ok=True)
+            file_handler = logging.FileHandler(config.LOG_FILE)
+            file_handler.setLevel(level)
+            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            logger.addHandler(file_handler)
+        except OSError as exc:  # read-only filesystem etc. must never stop the app
+            logger.warning(f'Could not open LOG_FILE {config.LOG_FILE!r} ({exc}); logging to console only')
+
+
+configure_logging()
+
+
+# ── Exceptions ──────────────────────────────────────────────────────────────
 class ATSBaseError(Exception):
-    """Simple base class for ATS errors."""
+    """Base class for errors whose message is safe to show to the user."""
     def __init__(self, message: str, user_message: Optional[str] = None, **kwargs):
         super().__init__(message)
         self.message = message
-        self.user_message = user_message or 'An error occurred. Please try again.'
+        self.user_message = user_message or message
+
 
 class FileUploadError(ATSBaseError):
     pass
 
+
+class FileValidationError(ATSBaseError):
+    """The uploaded file is empty, too large, or not a supported type."""
+
+
 class FileParsingError(ATSBaseError):
-    pass
+    """The file looks valid but its text could not be extracted."""
+
 
 class TextExtractionError(ATSBaseError):
     pass
 
+
+# ── Logging helpers ─────────────────────────────────────────────────────────
 def log_error(error: Exception, context: Optional[str] = None, **kwargs) -> None:
-    """Log an error simply."""
     logger.error(f"Error in {context or 'unknown'}: {error}")
 
+
 def log_warning(message: str, context: Optional[str] = None, **kwargs) -> None:
-    """Log a warning simply."""
     logger.warning(f"{context}: {message}" if context else message)
 
+
 def log_info(message: str, context: Optional[str] = None, **kwargs) -> None:
-    """Log info simply."""
     logger.info(f"{context}: {message}" if context else message)
 
+
 T = TypeVar('T')
+
 
 def with_fallback(
     primary_func: Callable[..., T],
@@ -62,7 +89,7 @@ def with_fallback(
     log_fallback: bool = True,
     **kwargs
 ) -> Tuple[T, bool]:
-    # Remove error_category if passed by accident
+    """Run primary_func; if it raises, run fallback_func. Returns (result, used_fallback)."""
     kwargs.pop('error_category', None)
     try:
         return primary_func(*args, **kwargs), False
@@ -74,49 +101,3 @@ def with_fallback(
         except Exception as fallback_error:
             log_error(fallback_error, context="fallback")
             raise
-
-def get_default_grammar_results() -> Dict:
-    return {
-        'total_errors':         0,
-        'critical_errors':      [],
-        'moderate_errors':      [],
-        'minor_errors':         [],
-        'grammar_score':        100,
-        'penalty_applied':      0,
-        'error_free_percentage': 100,
-        '_component_status':    'unavailable',
-        '_note': 'Grammar checking unavailable.'
-    }
-
-def get_default_location_results() -> Dict:
-    return {
-        'location_found':     False,
-        'detected_locations': [],
-        'privacy_risk':       'unknown',
-        'recommendations':    ['Location detection unavailable.'],
-        'penalty_applied':    0,
-        '_component_status':  'unavailable',
-        '_note': 'Location detection unavailable.'
-    }
-
-def get_default_skill_validation_results() -> Dict:
-    return {
-        'validated_skills':     [],
-        'unvalidated_skills':   [],
-        'validation_percentage': 0.0,
-        'skill_project_mapping': {},
-        'validation_score':     0.0,
-        '_component_status':    'unavailable',
-        '_note': 'Skill validation unavailable.'
-    }
-
-def get_default_jd_comparison_results() -> Dict:
-    return {
-        'semantic_similarity': 0.0,
-        'matched_keywords':    [],
-        'missing_keywords':    [],
-        'skills_gap':          [],
-        'match_percentage':    0.0,
-        '_component_status':   'unavailable',
-        '_note': 'JD comparison unavailable.'
-    }

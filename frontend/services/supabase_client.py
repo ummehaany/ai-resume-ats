@@ -44,9 +44,21 @@ def _missing_config() -> str | None:
 
 @st.cache_resource
 def get_client() -> Client | None:
-    """Cached singleton — preserves PKCE state across Streamlit reruns."""
+    """Cached singleton used ONLY for the Google OAuth (PKCE) flow.
+
+    The browser leaves the app and comes back in a brand-new Streamlit session, so the PKCE
+    code verifier has to live in something that survives that round trip. Nothing else uses this
+    client: password sign-in/up use a fresh client per call, so one visitor's session can never
+    be mixed up with another's. (Limitation: two people starting Google sign-in at the same
+    instant can overwrite each other's verifier; the loser just clicks the button again.)
+    """
     if _missing_config():
         return None
+    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+
+def _new_client() -> Client:
+    """A throw-away client with its own in-memory session (never shared between users)."""
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
@@ -64,7 +76,7 @@ def sign_in_with_password(email: str, password: str) -> Dict[str, Any]:
     if err:
         return {'error': err}
     try:
-        resp = get_client().auth.sign_in_with_password(
+        resp = _new_client().auth.sign_in_with_password(
             {'email': email, 'password': password}
         )
         if not resp.session or not resp.user:
@@ -80,7 +92,7 @@ def sign_up_with_password(email: str, password: str) -> Dict[str, Any]:
     if err:
         return {'error': err}
     try:
-        resp = get_client().auth.sign_up({'email': email, 'password': password})
+        resp = _new_client().auth.sign_up({'email': email, 'password': password})
         if resp.session and resp.user:
             return _session_dict(resp.session, resp.user)
         if resp.user:
@@ -128,13 +140,20 @@ def exchange_code_for_session(auth_code: str) -> Dict[str, Any]:
         return {'error': _humanize(exc)}
 
 
-def sign_out() -> None:
-    if _missing_config():
+def sign_out(access_token: str | None) -> None:
+    """Revoke this user's session on the Supabase server (local scope = this browser session only)."""
+    if _missing_config() or not access_token:
         return
     try:
-        get_client().auth.sign_out()
+        import requests
+        requests.post(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/logout",
+            params={'scope': 'local'},
+            headers={'apikey': SUPABASE_ANON_KEY, 'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
     except Exception as exc:
-        logger.warning(f'sign_out failed: {exc}')
+        logger.warning(f'sign_out failed: {type(exc).__name__}')
 
 
 def _humanize(exc: Exception) -> str:

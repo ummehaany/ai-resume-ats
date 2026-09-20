@@ -1,0 +1,4 @@
+# Everything needed to run the test-suite:  pip install -r requirements-dev.txt
+-r requirements-backend.txt
+-r frontend/requirements.txt
+pytest==9.1.1

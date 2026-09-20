@@ -6,9 +6,9 @@ textColor = "#1E293B"
 font = "sans serif"
 
 [server]
-maxUploadSize = 10
-enableXsrfProtection = false
-enableCORS = false
+# Matches the backend's 5 MB resume limit. (XSRF protection and CORS are left at
+# Streamlit's secure defaults - do not disable them.)
+maxUploadSize = 5
 headless = true
 
 [browser]
