@@ -16,6 +16,14 @@ _ASYMMETRIC_ALGS = ['ES256', 'RS256']
 _jwks_client: jwt.PyJWKClient | None = None
 
 
+class AuthConfigError(jwt.InvalidTokenError):
+    """A well-formed token arrived but the SERVER cannot verify it (missing key/secret).
+
+    Callers still see a plain 401 (nothing about the server setup is revealed), but this is logged at ERROR
+    level so the operator sees the cause in the logs instead of a silent, misleading "Invalid token".
+    """
+
+
 @dataclass(frozen=True)
 class AuthenticatedUser:
     """Identity taken from a verified Supabase access token."""
@@ -41,7 +49,7 @@ def _verify_token(token: str) -> dict:
     if alg in _ASYMMETRIC_ALGS:
         jwks_client = _get_jwks_client()
         if jwks_client is None:
-            raise jwt.InvalidTokenError('SUPABASE_URL not configured - cannot fetch JWKS to verify token')
+            raise AuthConfigError('SUPABASE_URL not configured - cannot fetch JWKS to verify token')
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
         return jwt.decode(
             token,
@@ -52,7 +60,7 @@ def _verify_token(token: str) -> dict:
 
     if alg == 'HS256':
         if not config.SUPABASE_JWT_SECRET:
-            raise jwt.InvalidTokenError('HS256 token received but SUPABASE_JWT_SECRET is not configured')
+            raise AuthConfigError('HS256 token received but SUPABASE_JWT_SECRET is not configured')
         return jwt.decode(
             token,
             config.SUPABASE_JWT_SECRET,
@@ -88,6 +96,9 @@ def get_current_user(
         payload = _verify_token(creds.credentials)
     except jwt.ExpiredSignatureError:
         raise _unauthorized('Token expired - sign in again')
+    except AuthConfigError as exc:
+        logger.error(f'Cannot verify sign-in tokens: {exc}. Every request signed with this algorithm will get HTTP 401.')
+        raise _unauthorized('Invalid token')
     except jwt.InvalidTokenError as exc:
         logger.info(f'Rejected token: {type(exc).__name__}')
         raise _unauthorized('Invalid token')

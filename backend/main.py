@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from backend.core import config
 from backend.core.middleware import BodySizeLimitMiddleware
@@ -40,6 +41,42 @@ def load_embedder():
     return model
 
 
+def check_auth_setup() -> None:
+    """Log (never raise) how sign-in tokens will be verified.
+
+    A Supabase project signs user tokens either with an asymmetric key (published at /.well-known/jwks.json,
+    ES256/RS256) or, on older projects, with the shared "legacy JWT secret" (HS256, which needs
+    SUPABASE_JWT_SECRET here). If neither is available every request gets a 401, which the Streamlit UI
+    shows as "session expired" - so say so clearly in the startup log instead.
+    """
+    import httpx
+    url = f"{config.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    legacy = bool(config.SUPABASE_JWT_SECRET)
+    key_count = None
+    try:
+        response = httpx.get(url, timeout=5.0)
+        response.raise_for_status()
+        key_count = len(response.json().get('keys', []))
+    except Exception as exc:
+        logger.warning(
+            f'Auth check: could not read the Supabase signing keys ({type(exc).__name__}). '
+            'Tokens signed with an asymmetric key cannot be verified until the API can reach Supabase.'
+        )
+    if key_count:
+        logger.info(
+            f'Auth check: {key_count} Supabase signing key(s) found (ES256/RS256 tokens can be verified); '
+            f'legacy HS256 secret {"is" if legacy else "is not"} configured.'
+        )
+    elif key_count == 0 and legacy:
+        logger.info('Auth check: this project publishes no signing keys; using the configured legacy HS256 secret.')
+    elif key_count == 0:
+        logger.error(
+            'Auth check: this Supabase project publishes no signing keys (legacy HS256 project) and '
+            'SUPABASE_JWT_SECRET is not set - EVERY sign-in token will be rejected with HTTP 401. '
+            'Set SUPABASE_JWT_SECRET to the project\'s legacy JWT secret (Supabase dashboard -> Project Settings -> JWT Keys / API).'
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info('Starting ATS Resume Analyzer API...')
@@ -54,6 +91,7 @@ async def lifespan(app: FastAPI):
 
     app.state.nlp = load_spacy_model()
     app.state.embedder = load_embedder()
+    await run_in_threadpool(check_auth_setup)   # diagnostic only; never blocks startup for more than ~5 s
     logger.info('All models loaded. API is ready to serve requests.')
 
     yield

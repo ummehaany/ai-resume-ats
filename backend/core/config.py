@@ -111,7 +111,13 @@ SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()
 SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '').strip()      # public "anon" key; RLS protects data
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET', '').strip()  # only for legacy HS256 projects
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '').strip()
-GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile').strip()
+# Groq shut down llama-3.3-70b-versatile on 2026-08-16 (console.groq.com/docs/deprecations); their recommended
+# replacement, openai/gpt-oss-120b, is a current production model. Override with GROQ_MODEL if Groq changes this again.
+GROQ_MODEL = os.getenv('GROQ_MODEL', 'openai/gpt-oss-120b').strip()
+# gpt-oss models are reasoning models: their reasoning tokens count against the completion budget, so keep the effort
+# low (resume -> JSON extraction needs no deep reasoning) and leave room for the JSON itself. Only sent to gpt-oss.
+GROQ_REASONING_EFFORT = os.getenv('GROQ_REASONING_EFFORT', 'low').strip().lower()
+GROQ_MAX_TOKENS = _env_int('GROQ_MAX_TOKENS', 8192)
 GROQ_TIMEOUT_SECONDS = _env_int('GROQ_TIMEOUT_SECONDS', 45)
 SUPABASE_TIMEOUT_SECONDS = _env_int('SUPABASE_TIMEOUT_SECONDS', 10)
 

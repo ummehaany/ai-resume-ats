@@ -1,0 +1,16 @@
+# What `gcloud builds submit` / `gcloud run deploy --source` uploads to Google Cloud.
+# Only the backend image is built (see Dockerfile: it copies requirements-backend.txt and backend/), so keep everything else -
+# above all any .env with real keys - out of the upload.
+#!include:.gitignore
+
+.git
+.env
+.env.*
+!.env.example
+frontend/
+tests/
+supabase/
+jupyter notebooks/
+.pytest_cache/
+deploy/
+*.md

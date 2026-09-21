@@ -105,15 +105,18 @@ Resume Text (between the <resume> tags):
 
 def _call_groq(client: Groq, system_prompt: str, user_prompt: str) -> str:
     try:
-        response = client.chat.completions.create(
+        request = dict(
             model=config.GROQ_MODEL,
             messages=[
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': user_prompt},
             ],
             temperature=0.0,
-            max_tokens=4096,
+            max_tokens=config.GROQ_MAX_TOKENS,
         )
+        if config.GROQ_MODEL.startswith('openai/gpt-oss') and config.GROQ_REASONING_EFFORT in ('low', 'medium', 'high'):
+            request['reasoning_effort'] = config.GROQ_REASONING_EFFORT
+        response = client.chat.completions.create(**request)
         content = response.choices[0].message.content
     except Exception as exc:
         # Log only the exception type and HTTP status: provider error bodies can echo request data.

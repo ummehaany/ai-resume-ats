@@ -1,6 +1,6 @@
 # ATS Resume Scorer
 
-A web app that scores how well a resume fits ATS (applicant tracking system) screening, optionally against a job description, and returns actionable feedback. FastAPI backend + Streamlit frontend, spaCy and Sentence Transformers for NLP, the Groq API (Llama 3.3 70B) to parse resumes and job descriptions into structured data, and Supabase for sign-in and saved history.
+A web app that scores how well a resume fits ATS (applicant tracking system) screening, optionally against a job description, and returns actionable feedback. FastAPI backend + Streamlit frontend, spaCy and Sentence Transformers for NLP, the Groq API (OpenAI gpt-oss-120b) to parse resumes and job descriptions into structured data, and Supabase for sign-in and saved history.
 
 > **Credit.** This project is based on the course project **"AI Resume ATS" by Shradha Khapra** - <https://github.com/shradha-khapra/ai-resume-ats>. The original architecture, scoring design, prompts and UI come from that repository. This copy contains bug fixes, security hardening, tests and deployment files added on top of it (see [What changed](#what-changed-from-the-original-course-code)). The original repository does not include a LICENSE file: follow your course's attribution/usage rules, keep this credit in place, and do not add a license of your own unless the course allows it.
 

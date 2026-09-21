@@ -145,3 +145,39 @@ def test_job_description_parse_is_normalised(monkeypatch):
     script_llm(monkeypatch, [json.dumps({'job_title': 'X', 'required_skills': 'oops', 'keywords': ['a', 1]})])
     r = gp.parse_job_description('jd')
     assert r['required_skills'] == [] and r['keywords'] == ['a'] and r['job_title'] == 'X'
+
+
+# ── request shape for the configured model (no network: the Groq client is a recording fake) ─────────────
+class _RecordingClient:
+    def __init__(self):
+        self.calls = []
+        outer = self
+
+        class _Completions:
+            def create(self, **kwargs):
+                outer.calls.append(kwargs)
+                message = type('M', (), {'content': GOOD})()
+                return type('R', (), {'choices': [type('C', (), {'message': message})()]})()
+
+        self.chat = type('Chat', (), {'completions': _Completions()})()
+
+
+def test_gpt_oss_model_gets_low_reasoning_effort_and_a_roomy_token_budget(monkeypatch):
+    monkeypatch.setattr(config, 'GROQ_MODEL', 'openai/gpt-oss-120b')
+    client = _RecordingClient()
+    assert gp._call_groq(client, 'sys', 'usr') == GOOD
+    call = client.calls[0]
+    assert call['model'] == 'openai/gpt-oss-120b'
+    assert call['reasoning_effort'] == 'low'
+    assert call['max_tokens'] == config.GROQ_MAX_TOKENS >= 4096
+
+
+def test_other_models_do_not_receive_a_reasoning_parameter(monkeypatch):
+    monkeypatch.setattr(config, 'GROQ_MODEL', 'some-other/model')
+    client = _RecordingClient()
+    gp._call_groq(client, 'sys', 'usr')
+    assert 'reasoning_effort' not in client.calls[0]
+
+
+def test_default_model_is_not_the_decommissioned_llama_3_3():
+    assert config.GROQ_MODEL != 'llama-3.3-70b-versatile'
